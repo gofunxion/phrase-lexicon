@@ -208,9 +208,9 @@ header h1 {
 }
 
 .card-front {
-  font-size: 1.35rem;
-  line-height: 1.75;
-  font-weight: 600;
+  font-size: 1.1rem;
+  line-height: 1.65;
+  font-weight: 400;
   white-space: pre-wrap;
 }
 
@@ -265,12 +265,13 @@ header h1 {
 
 .cloze-input {
   display: inline-block;
-  min-width: 6rem;
-  max-width: min(100%, 12rem);
-  margin: 0 0.15rem;
-  padding: 0.2rem 0.45rem;
+  width: 2ch;
+  min-width: 1.25rem;
+  max-width: min(100%, 14rem);
+  margin: 0 0.1rem;
+  padding: 0.15rem 0.25rem;
   font: inherit;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--text);
   background: var(--bg);
   border: none;
@@ -278,6 +279,7 @@ header h1 {
   border-radius: 4px 4px 0 0;
   text-align: center;
   vertical-align: baseline;
+  box-sizing: content-box;
 }
 
 .cloze-input:focus {
@@ -303,6 +305,22 @@ header h1 {
   color: var(--accent);
 }
 
+.card-back,
+.card-back * {
+  font-weight: 400;
+}
+
+.card-back .answer-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.card-back .answer-text {
+  display: block;
+  margin-top: 0.35rem;
+  font-weight: 400;
+}
+
 .card-back .your-answer {
   display: block;
   margin-top: 0.5rem;
@@ -311,19 +329,15 @@ header h1 {
   color: var(--muted);
 }
 
-.card-back strong {
-  color: inherit;
-}
-
 .card-back {
   margin-top: 1.25rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--border);
-  font-size: 1.5rem;
-  line-height: 1.4;
+  font-size: 1.1rem;
+  line-height: 1.5;
   color: var(--accent);
   width: 100%;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .reveal-btn {
@@ -502,9 +516,9 @@ header h1 {
   .dir-btn { flex: 1; }
   .sync-btn { width: 100%; }
   .card { padding: 1.5rem 1rem; min-height: 200px; }
-  .card-front { font-size: 1.2rem; }
-  .cloze-input { min-width: 5rem; max-width: 100%; font-size: 1.1rem; }
-  .card-back { font-size: 1.2rem; }
+  .card-front { font-size: 1.05rem; }
+  .cloze-input { min-width: 1rem; max-width: 100%; font-size: 1.05rem; }
+  .card-back { font-size: 1.05rem; }
   .rating-area { grid-template-columns: repeat(2, 1fr); gap: 0.65rem; }
   .rate-btn { min-height: 56px; font-size: 1rem; }
   .stats { flex-wrap: wrap; gap: 0.75rem 1.25rem; }

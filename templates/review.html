@@ -305,6 +305,12 @@
       return value.trim().toLowerCase().replace(/\s+/g, " ");
     }
 
+    function resizeClozeInput(input) {
+      const minCh = 2;
+      const length = Math.max(minCh, input.value.length + 1);
+      input.style.width = `${length}ch`;
+    }
+
     function renderCardFront(text) {
       if (!text.includes("_____")) {
         els.cardFront.textContent = text;
@@ -322,6 +328,8 @@
           input.setAttribute("aria-label", "Your answer");
           input.autocomplete = "off";
           input.spellcheck = false;
+          resizeClozeInput(input);
+          input.addEventListener("input", () => resizeClozeInput(input));
           els.cardFront.appendChild(input);
         }
       });
@@ -353,8 +361,8 @@
         els.cardBack.classList.toggle("correct", correct);
         els.cardBack.classList.toggle("incorrect", !correct);
         els.cardBack.innerHTML = correct
-          ? `✓ Correct: <strong>${escapeHtml(currentCard.back)}</strong>`
-          : `Answer: <strong>${escapeHtml(currentCard.back)}</strong>${userAnswer ? `<span class="your-answer"> (you wrote: ${escapeHtml(input.value.trim())})</span>` : ""}`;
+          ? `<span class="answer-label">✓ Correct</span><span class="answer-text">${escapeHtml(currentCard.back)}</span>`
+          : `<span class="answer-label">Answer</span><span class="answer-text">${escapeHtml(currentCard.back)}</span>${userAnswer ? `<span class="your-answer"> (you wrote: ${escapeHtml(input.value.trim())})</span>` : ""}`;
       } else {
         els.cardBack.classList.remove("correct", "incorrect");
         els.cardBack.textContent = currentCard.back;
