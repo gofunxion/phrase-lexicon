@@ -204,7 +204,7 @@ def _block_hints(sections: dict[str, dict[str, str]]) -> dict[str, str]:
 
 def _extract_html_image_hints(html: str) -> list[str]:
     hints: list[str] = []
-    for part in re.split(r"Hint:</span>", html, flags=re.IGNORECASE)[1:]:
+    for part in re.split(r"Hint:\s*</span>", html, flags=re.IGNORECASE)[1:]:
         img = re.search(r'<img[^>]+src="([^"]+)"', part, re.IGNORECASE)
         hints.append(img.group(1) if img else "")
     return hints

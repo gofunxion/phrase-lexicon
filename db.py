@@ -142,7 +142,6 @@ def import_cards(cards: list[dict]) -> tuple[int, int, int]:
                         UPDATE cards
                         SET visual_hint = ?
                         WHERE direction = ? AND front = ? AND back = ?
-                          AND (visual_hint IS NULL OR visual_hint = '')
                         """,
                         (
                             normalized.get("hint", ""),
