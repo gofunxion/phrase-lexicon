@@ -1,14 +1,20 @@
 """Parse flashcards from the Deutsch Google Doc export."""
 
 import hashlib
+import base64
 import os
 import re
 import urllib.request
+from pathlib import Path
 
 DOC_ID = os.environ.get(
     "GOOGLE_DOC_ID", "1TX2Qd17AJ9nQ_A3QUtNSNbQ5WEqt4hfFVoaAUD_ifCw"
 ).strip()
 DEFAULT_DOC_TAB = "t.x0jh4b5vn4op"
+
+_data_dir = Path(os.environ.get("DATA_DIR", Path(__file__).parent))
+HINTS_DIR = _data_dir / "hints"
+HINTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def normalize_tab_id(tab: str) -> str:
@@ -49,6 +55,36 @@ def fetch_doc(url: str | None = None) -> str:
         return resp.read().decode("utf-8")
 
 
+def fetch_doc_html() -> str:
+    url = export_url().replace("format=txt", "format=html")
+    with urllib.request.urlopen(url, timeout=60) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
+def _persist_hint_src(src: str) -> str:
+    if not src.startswith("data:image/"):
+        return src
+
+    header, _, payload = src.partition(",")
+    if not payload:
+        return ""
+
+    raw = base64.b64decode(payload)
+    ext = "png"
+    if "image/jpeg" in header or "image/jpg" in header:
+        ext = "jpg"
+    elif "image/gif" in header:
+        ext = "gif"
+    elif "image/webp" in header:
+        ext = "webp"
+
+    digest = hashlib.sha1(raw).hexdigest()[:16]
+    path = HINTS_DIR / f"{digest}.{ext}"
+    if not path.exists():
+        path.write_bytes(raw)
+    return f"/api/hints/{digest}.{ext}"
+
+
 ENGLISH_LINE = re.compile(
     r"^(to |a |an |the |no |slow |social |free |fuel |perception|please )",
     re.I,
@@ -86,6 +122,9 @@ def classify_hint(text: str) -> tuple[str, str]:
     text = normalize_text(text) if text else ""
     if not text:
         return "", "none"
+
+    if text.startswith("data:image/") or text.startswith("/api/hints/"):
+        return text, "image"
 
     image_match = IMAGE_URL_RE.search(text)
     if image_match:
@@ -161,6 +200,46 @@ def _block_hints(sections: dict[str, dict[str, str]]) -> dict[str, str]:
         return {direction: shared_image for direction in sections}
 
     return {direction: payload.get("hint", "") for direction, payload in sections.items()}
+
+
+def _extract_html_image_hints(html: str) -> list[str]:
+    hints: list[str] = []
+    for part in re.split(r"Hint:</span>", html, flags=re.IGNORECASE)[1:]:
+        img = re.search(r'<img[^>]+src="([^"]+)"', part, re.IGNORECASE)
+        hints.append(img.group(1) if img else "")
+    return hints
+
+
+def _apply_group_image_hints(cards: list[dict]) -> None:
+    by_group: dict[str, list[dict]] = {}
+    for card in cards:
+        by_group.setdefault(card["group_key"], []).append(card)
+
+    for group in by_group.values():
+        shared_image = ""
+        for card in group:
+            _, hint_type = classify_hint(card.get("hint", ""))
+            if hint_type == "image":
+                shared_image = card["hint"]
+                break
+        if shared_image:
+            for card in group:
+                card["hint"] = shared_image
+
+
+def merge_html_image_hints(cards: list[dict], html: str) -> None:
+    images = _extract_html_image_hints(html)
+    img_idx = 0
+    for card in cards:
+        if card.get("hint"):
+            continue
+        while img_idx < len(images) and not images[img_idx]:
+            img_idx += 1
+        if img_idx >= len(images):
+            break
+        card["hint"] = _persist_hint_src(images[img_idx])
+        img_idx += 1
+    _apply_group_image_hints(cards)
 
 
 def parse_cloze_block(block: str) -> list[dict]:
@@ -306,10 +385,17 @@ def parse_gwod_cards(text: str) -> list[dict]:
 
 
 def parse_all(text: str | None = None) -> list[dict]:
+    html: str | None = None
     if text is None:
         text = fetch_doc()
+        try:
+            html = fetch_doc_html()
+        except Exception:
+            html = None
 
     cloze = parse_cloze_cards(text)
+    if html and cloze:
+        merge_html_image_hints(cloze, html)
     legacy = parse_phrase_lexicon_legacy(text) if not cloze else []
     cards = cloze + legacy + parse_gwod_cards(text)
 

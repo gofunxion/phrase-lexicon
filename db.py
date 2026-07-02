@@ -136,6 +136,21 @@ def import_cards(cards: list[dict]) -> tuple[int, int, int]:
             identity = card_identity(normalized)
 
             if identity in seen_batch or identity in existing:
+                if normalized.get("hint"):
+                    conn.execute(
+                        """
+                        UPDATE cards
+                        SET visual_hint = ?
+                        WHERE direction = ? AND front = ? AND back = ?
+                          AND (visual_hint IS NULL OR visual_hint = '')
+                        """,
+                        (
+                            normalized.get("hint", ""),
+                            normalized["direction"],
+                            normalized["front"],
+                            normalized["back"],
+                        ),
+                    )
                 skipped += 1
                 seen_batch.add(identity)
                 continue
@@ -183,17 +198,45 @@ def get_card_by_id(card_id: int) -> dict | None:
         return _row_to_card(row, conn)
 
 
+def _direction_filter_sql() -> str:
+    """Include cards in the requested direction, plus orphan cards from the other direction."""
+    return """
+        direction = ?
+        OR (
+            direction != ?
+            AND group_key != ''
+            AND NOT EXISTS (
+                SELECT 1 FROM cards AS other
+                WHERE other.group_key = cards.group_key
+                  AND other.direction = ?
+            )
+        )
+    """
+
+
+def get_card_in_group(group_key: str, direction: str) -> dict | None:
+    init_db()
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM cards WHERE group_key = ? AND direction = ? LIMIT 1",
+            (group_key, direction),
+        ).fetchone()
+        if not row:
+            return None
+        return _row_to_card(row, conn)
+
+
 def get_due_card(direction: str) -> dict | None:
     init_db()
     with connect() as conn:
         row = conn.execute(
-            """
+            f"""
             SELECT * FROM cards
-            WHERE due <= ? AND direction = ?
+            WHERE due <= ? AND ({_direction_filter_sql()})
             ORDER BY due ASC, reps ASC, id ASC
             LIMIT 1
             """,
-            (today().isoformat(), direction),
+            (today().isoformat(), direction, direction, direction),
         ).fetchone()
         if not row:
             return None
@@ -205,15 +248,19 @@ def get_stats(direction: str | None = None) -> dict:
     with connect() as conn:
         if direction:
             total = conn.execute(
-                "SELECT COUNT(*) FROM cards WHERE direction = ?", (direction,)
+                f"SELECT COUNT(*) FROM cards WHERE {_direction_filter_sql()}",
+                (direction, direction, direction),
             ).fetchone()[0]
             due = conn.execute(
-                "SELECT COUNT(*) FROM cards WHERE due <= ? AND direction = ?",
-                (today().isoformat(), direction),
+                f"SELECT COUNT(*) FROM cards WHERE due <= ? AND ({_direction_filter_sql()})",
+                (today().isoformat(), direction, direction, direction),
             ).fetchone()[0]
             new_cards = conn.execute(
-                "SELECT COUNT(*) FROM cards WHERE reps = 0 AND direction = ?",
-                (direction,),
+                f"""
+                SELECT COUNT(*) FROM cards
+                WHERE reps = 0 AND ({_direction_filter_sql()})
+                """,
+                (direction, direction, direction),
             ).fetchone()[0]
         else:
             total = conn.execute("SELECT COUNT(*) FROM cards").fetchone()[0]

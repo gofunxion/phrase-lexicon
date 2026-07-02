@@ -20,8 +20,8 @@
 
     <div class="toolbar">
       <div class="direction-toggle" role="group" aria-label="Card direction">
-        <button id="btn-en-de" class="dir-btn active" data-direction="en_de">EN → DE</button>
-        <button id="btn-de-en" class="dir-btn" data-direction="de_en">DE → EN</button>
+        <button id="btn-de-en" class="dir-btn{% if direction == 'de_en' %} active{% endif %}" data-direction="de_en">DE → EN</button>
+        <button id="btn-en-de" class="dir-btn{% if direction == 'en_de' %} active{% endif %}" data-direction="en_de">EN → DE</button>
       </div>
 
       <button id="btn-sync" class="sync-btn">Sync from Google Doc</button>
@@ -165,23 +165,46 @@
       resetInputLabel: document.getElementById("reset-input-label"),
     };
 
-    function updateDirectionButtons(card = null) {
+    function updateDirectionButtons() {
       const enBtn = document.getElementById("btn-en-de");
       const deBtn = document.getElementById("btn-de-en");
-
-      if (card && !card.can_switch_direction) {
-        enBtn.disabled = card.direction !== "en_de";
-        deBtn.disabled = card.direction !== "de_en";
-        return;
-      }
-
-      enBtn.disabled = directionCounts.en_de === 0;
-      deBtn.disabled = directionCounts.de_en === 0;
+      const hasCards = directionCounts.en_de > 0 || directionCounts.de_en > 0;
+      enBtn.disabled = !hasCards;
+      deBtn.disabled = !hasCards;
     }
 
-    function setDirection(next) {
-      const btn = document.querySelector(`.dir-btn[data-direction="${next}"]`);
-      if (btn?.disabled) return;
+    async function loadSiblingCard(nextDirection) {
+      if (!currentCard?.group_key) return false;
+      const res = await fetch(
+        `/api/card-for-group?group_key=${encodeURIComponent(currentCard.group_key)}&direction=${nextDirection}`
+      );
+      const data = await res.json();
+      if (!data.ok || !data.card) return false;
+      direction = nextDirection;
+      document.querySelectorAll(".dir-btn").forEach((button) => {
+        button.classList.toggle("active", button.dataset.direction === direction);
+      });
+      renderCard(data.card);
+      return true;
+    }
+
+    async function setDirection(next) {
+      const hasCards = directionCounts.en_de > 0 || directionCounts.de_en > 0;
+      if (!hasCards) return;
+
+      if (currentCard) {
+        if (currentCard.can_switch_direction && currentCard.direction !== next) {
+          const switched = await loadSiblingCard(next);
+          if (switched) return;
+        }
+        if (!currentCard.can_switch_direction) {
+          direction = next;
+          document.querySelectorAll(".dir-btn").forEach((button) => {
+            button.classList.toggle("active", button.dataset.direction === direction);
+          });
+          return;
+        }
+      }
 
       direction = next;
       sessionDone = 0;
@@ -383,7 +406,7 @@
       renderHint(card);
       els.cardBack.textContent = card.back;
       els.btnReveal.textContent = card.front.includes("_____") ? "Check answer" : "Show answer";
-      updateDirectionButtons(card);
+      updateDirectionButtons();
       els.loadingState.classList.add("hidden");
       els.cardArea.classList.remove("hidden");
       els.emptyState.classList.add("hidden");
@@ -472,7 +495,12 @@
       const res = await fetch("/api/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: currentCard.id, rating, direction }),
+        body: JSON.stringify({
+          id: currentCard.id,
+          rating,
+          direction: currentCard.direction,
+          study_direction: direction,
+        }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -560,8 +588,8 @@
       }
     }
 
-    document.getElementById("btn-en-de").addEventListener("click", () => setDirection("en_de"));
     document.getElementById("btn-de-en").addEventListener("click", () => setDirection("de_en"));
+    document.getElementById("btn-en-de").addEventListener("click", () => setDirection("en_de"));
     document.getElementById("btn-sync").addEventListener("click", syncDoc);
     document.getElementById("btn-reset-progress").addEventListener("click", () => openResetModal("progress"));
     document.getElementById("btn-reset-dict").addEventListener("click", () => openResetModal("dict"));

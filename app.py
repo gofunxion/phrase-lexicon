@@ -2,12 +2,12 @@
 
 import os
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 import db
 from scheduler import review_card
 from sync_service import run_sync
-from parser import doc_source
+from parser import HINTS_DIR, doc_source
 
 app = Flask(__name__)
 
@@ -22,9 +22,9 @@ def _sync_response(force: bool = False) -> dict:
 @app.route("/")
 def index():
     db.init_db()
-    direction = request.args.get("direction", "en_de")
+    direction = request.args.get("direction", "de_en")
     if direction not in ("en_de", "de_en"):
-        direction = "en_de"
+        direction = "de_en"
     stats = db.get_stats(direction)
     return render_template("review.html", stats=stats, direction=direction)
 
@@ -47,9 +47,9 @@ def sync_auto():
 
 @app.route("/api/next")
 def next_card():
-    direction = request.args.get("direction", "en_de")
+    direction = request.args.get("direction", "de_en")
     if direction not in ("en_de", "de_en"):
-        direction = "en_de"
+        direction = "de_en"
     card = db.get_due_card(direction)
     if not card:
         return jsonify(
@@ -70,12 +70,27 @@ def next_card():
     )
 
 
+@app.route("/api/card-for-group")
+def card_for_group():
+    group_key = request.args.get("group_key", "")
+    direction = request.args.get("direction", "de_en")
+    if direction not in ("en_de", "de_en"):
+        direction = "de_en"
+    if not group_key:
+        return jsonify({"ok": False, "error": "Missing group_key"}), 400
+    card = db.get_card_in_group(group_key, direction)
+    if not card:
+        return jsonify({"ok": True, "card": None})
+    return jsonify({"ok": True, "card": card})
+
+
 @app.route("/api/review", methods=["POST"])
 def review():
     data = request.get_json(force=True)
     card_id = data.get("id")
     rating = data.get("rating")
-    direction = data.get("direction", "en_de")
+    direction = data.get("direction", "de_en")
+    study_direction = data.get("study_direction", direction)
 
     if card_id is None or rating not in (0, 1, 2, 3):
         return jsonify({"ok": False, "error": "Invalid review payload"}), 400
@@ -88,14 +103,21 @@ def review():
 
     updated = review_card(card, rating)
     db.update_card(card_id, updated)
-    return jsonify({"ok": True, "stats": db.get_stats(direction)})
+    return jsonify({"ok": True, "stats": db.get_stats(study_direction)})
+
+
+@app.route("/api/hints/<path:filename>")
+def hint_image(filename: str):
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return jsonify({"ok": False, "error": "Not found"}), 404
+    return send_from_directory(HINTS_DIR, filename)
 
 
 @app.route("/api/status")
 def status():
-    direction = request.args.get("direction", "en_de")
+    direction = request.args.get("direction", "de_en")
     if direction not in ("en_de", "de_en"):
-        direction = "en_de"
+        direction = "de_en"
     return jsonify(
         {
             "ok": True,
